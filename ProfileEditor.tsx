@@ -611,7 +611,7 @@ export function ProfileEditor({ user, session }: ProfileEditorProps) {
                 onClick={handleForgotPassword}
               >
                 <Mail className="w-4 h-4 mr-2" />
-                Send Password Reset Email
+                Send Reset Email
               </Button>
             </div>
           </CardContent>
