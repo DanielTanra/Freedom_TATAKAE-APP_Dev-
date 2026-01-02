@@ -136,37 +136,25 @@ export function ContentEditor({ session }: ContentEditorProps) {
   const fetchPendingContent = async () => {
     setLoadingPending(true);
     try {
-      const response = await fetch(getServerUrl('/content/pending'), {
+      // Fetch all materials and filter for pending ones
+      const materialsResponse = await serverFetch('/materials', {
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
         },
       });
-      const data = await response.json();
+      const materialsData = await materialsResponse.json();
+      const allMaterials = materialsData.materials || [];
       
-      // Handle the content structure
-      if (data.content && data.content.pendingMaterials) {
-        const materialsList = Array.isArray(data.content.pendingMaterials) 
-          ? data.content.pendingMaterials 
-          : [];
-        
-        setPendingMaterials(materialsList);
-      } else {
-        setPendingMaterials([]);
-      }
+      // Filter for pending materials only
+      const pendingMaterialsList = allMaterials.filter(
+        (m: PendingMaterial) => m.approval_status === 'pending'
+      );
+      setPendingMaterials(pendingMaterialsList);
 
-      if (data.content && data.content.pendingTopics) {
-        const topicsList = Array.isArray(data.content.pendingTopics) 
-          ? data.content.pendingTopics 
-          : [];
-        
-        setPendingTopics(topicsList);
-      } else {
-        setPendingTopics([]);
-      }
     } catch (error) {
       console.error('Error fetching pending content:', error);
       setPendingMaterials([]);
-      setPendingTopics([]);
+
     } finally {
       setLoadingPending(false);
     }
@@ -805,17 +793,25 @@ export function ContentEditor({ session }: ContentEditorProps) {
                                   onClick={async () => {
                                     setSaving(true);
                                     try {
-                                      const supabase = createClient();
-                                      const { error } = await supabase
-                                        .from('materials')
-                                        .update({ approval_status: 'approved' })
-                                        .eq('id', material.id);
+                                      // Update via serverFetch (kv_store)
+                                      const response = await serverFetch(`/materials/${material.id.replace('material:', '')}`, {
+                                        method: 'PUT',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                          'Authorization': `Bearer ${session.access_token}`,
+                                        },
+                                        body: JSON.stringify({
+                                          ...material,
+                                          approval_status: 'approved'
+                                        }),
+                                      });
                                       
-                                      if (error) throw error;
+                                      if (!response.ok) throw new Error('Failed to approve material');
                                       
                                       toast.success('Material approved successfully!');
                                       fetchPendingContent();
                                     } catch (error: any) {
+                                      console.error('Approve error:', error);
                                       toast.error('Failed to approve material');
                                     } finally {
                                       setSaving(false);
@@ -834,137 +830,26 @@ export function ContentEditor({ session }: ContentEditorProps) {
                                     
                                     setSaving(true);
                                     try {
-                                      const supabase = createClient();
-                                      const { error } = await supabase
-                                        .from('materials')
-                                        .update({ approval_status: 'rejected' })
-                                        .eq('id', material.id);
+                                      // Update via serverFetch (kv_store)
+                                      const response = await serverFetch(`/materials/${material.id.replace('material:', '')}`, {
+                                        method: 'PUT',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                          'Authorization': `Bearer ${session.access_token}`,
+                                        },
+                                        body: JSON.stringify({
+                                          ...material,
+                                          approval_status: 'rejected'
+                                        }),
+                                      });
                                       
-                                      if (error) throw error;
+                                      if (!response.ok) throw new Error('Failed to reject material');
                                       
                                       toast.success('Material rejected');
                                       fetchPendingContent();
                                     } catch (error: any) {
+                                      console.error('Reject error:', error);
                                       toast.error('Failed to reject material');
-                                    } finally {
-                                      setSaving(false);
-                                    }
-                                  }}
-                                  disabled={saving}
-                                >
-                                  <XCircle className="w-4 h-4 mr-1" />
-                                  Reject
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Pending Topics Section */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5" />
-                  Pending Discussion Topics
-                  {pendingTopics.length > 0 && (
-                    <Badge className="bg-orange-500">{pendingTopics.length}</Badge>
-                  )}
-                </CardTitle>
-                <CardDescription>
-                  Review and approve user-created forum topics
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loadingPending ? (
-                  <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-                    <p className="mt-2 text-sm text-gray-600">Loading pending content...</p>
-                  </div>
-                ) : pendingTopics.length === 0 ? (
-                  <Alert>
-                    <CheckCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      No pending topics to review. All caught up!
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <div className="space-y-4">
-                    {pendingTopics.map((topic) => (
-                      <Card key={topic.id} className="border-2 border-orange-200 bg-orange-50">
-                        <CardContent className="pt-4">
-                          <div className="space-y-3">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <h4 className="font-semibold text-lg">{topic.title}</h4>
-                              </div>
-                              <Badge className="bg-orange-500 ml-2">Pending</Badge>
-                            </div>
-                            
-                            <Badge variant="outline">{topic.category}</Badge>
-                            
-                            <div className="bg-white p-3 rounded border">
-                              <p className="text-sm text-gray-700">{topic.content}</p>
-                            </div>
-                            
-                            <div className="flex items-center justify-between pt-2">
-                              <div className="text-xs text-gray-500">
-                                Posted by: {topic.author_name} • {new Date(topic.created_at).toLocaleString()}
-                              </div>
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="default"
-                                  className="bg-green-600 hover:bg-green-700"
-                                  onClick={async () => {
-                                    setSaving(true);
-                                    try {
-                                      const supabase = createClient();
-                                      const { error } = await supabase
-                                        .from('topics')
-                                        .update({ approval_status: 'approved' })
-                                        .eq('id', topic.id);
-                                      
-                                      if (error) throw error;
-                                      
-                                      toast.success('Topic approved successfully!');
-                                      fetchPendingContent();
-                                    } catch (error: any) {
-                                      toast.error('Failed to approve topic');
-                                    } finally {
-                                      setSaving(false);
-                                    }
-                                  }}
-                                  disabled={saving}
-                                >
-                                  <CheckCircle className="w-4 h-4 mr-1" />
-                                  Approve
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={async () => {
-                                    if (!confirm('Are you sure you want to reject this topic?')) return;
-                                    
-                                    setSaving(true);
-                                    try {
-                                      const supabase = createClient();
-                                      const { error } = await supabase
-                                        .from('topics')
-                                        .update({ approval_status: 'rejected' })
-                                        .eq('id', topic.id);
-                                      
-                                      if (error) throw error;
-                                      
-                                      toast.success('Topic rejected');
-                                      fetchPendingContent();
-                                    } catch (error: any) {
-                                      toast.error('Failed to reject topic');
                                     } finally {
                                       setSaving(false);
                                     }
